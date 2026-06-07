@@ -1,95 +1,108 @@
-# 🤌 La Mafia — Agent Swarm para Forecasting
+# 🤌 La Mafia — Agent Swarm for Forecasting
 
-> *"En esta familia, el que no mejora el MAE, desaparece."*
+> *"In this family, if you don't improve the MAE, you disappear."*
 
-Sistema de agent swarm jerárquico con temática mafiosa italiana para **forecasting de series temporales univariadas**. Objetivo único: **minimizar MAE**.
+A hierarchical agent swarm system with an Italian mafia theme for **univariate time series forecasting**. Single objective: **minimize MAE**.
 
 ---
 
-## Arquitectura
+## Architecture
 
 ```
                         ┌─────────────────┐
-                        │   EL PATRÓN     │  ← coordinador / Queen
-                        │  (coordinator)  │     lanza y mata workers
-                        └────────┬────────┘     según presupuesto
+                        │   EL PATRÓN     │  ← coordinator / Queen
+                        │  (coordinator)  │     launches & kills workers
+                        └────────┬────────┘     based on budget
                                  │
               ┌──────────────────┼──────────────────┐
               ▼                  ▼                  ▼
      ┌────────────────┐ ┌────────────────┐  ┌──────────────┐
      │  L'EMISSARIO   │ │  IL CONTABILE  │  │  IL LIBRO    │
      │  (researcher)  │ │  (analyzer)    │  │  (leaderboard│
-     │  busca nuevas  │ │  analiza errores│  │   + memoria) │
-     │  técnicas      │ │  y propone dirs│  └──────────────┘
+     │  discovers new │ │  analyzes error│  │   + memory)  │
+     │  techniques    │ │  & proposes    │  └──────────────┘
      └────────┬───────┘ └───────┬────────┘
               └────────┬────────┘
-                       ▼  Cola de propuestas
+                       ▼  Proposal queue
                 ┌──────────────┐
-                │   EL PATRÓN  │ rankea: MAE_esperado × confianza ÷ costo
+                │   EL PATRÓN  │ ranks: expected_MAE × confidence ÷ cost
                 └──────┬───────┘
-                       │ lanza workers en paralelo
+                       │ launches workers in parallel
        ┌───────────────┼───────────────┬──────────────┐
        ▼               ▼               ▼              ▼
 ┌────────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────────┐
 │L'ARTIGIANO │ │IL SELEZION.  │ │ MODELOS  │ │  ENSEMBLE    │
 │ (features) │ │(feat.select.)│ │(HPO+back)│ │  (Top-K      │
-│lags, stats │ │importancia,  │ │ARIMA,ETS,│ │   blending)  │
+│lags, stats │ │importance,   │ │ARIMA,ETS,│ │   blending)  │
 │Fourier,cal.│ │mutual info   │ │LGBM,NBEATS│ └──────────────┘
 └────────────┘ └──────────────┘ └──────────┘
 ```
 
-Todos los workers reportan a **Il Libro** con MAE por fold. El Patrón cierra el loop.
+All workers report to **Il Libro** with per-fold MAE. El Patrón closes the loop.
 
 ---
 
-## Reglas de evaluación (no negociables)
+## Evaluation Rules (non-negotiable)
 
-| Regla | Detalle |
-|-------|---------|
-| Validación | **Rolling-origin** — nunca K-fold aleatorio |
-| Baseline | Siempre comparar contra **Seasonal Naive** |
-| Reporte | **MAE por fold** + MAE promedio |
-| Registro | Toda config y resultado en `il_libro.json` |
+| Rule | Details |
+|------|---------|
+| Validation | **Rolling-origin** — never random K-fold |
+| Baseline | Always compare against **Seasonal Naive** |
+| Reporting | **MAE per fold** + mean MAE |
+| Logging | Every config and result saved in `il_libro.json` |
 
 ---
 
-## Instalación
+## Installation
 
 ```bash
-# Clonar / crear carpeta
-git clone <repo> mafia-swarm && cd mafia-swarm
+# Clone the repo
+git clone https://github.com/vizcayal/mafia-swarm.git && cd mafia-swarm
 
-# Instalar dependencias
+# Install dependencies
 pip install -r requirements.txt
 
-# (Opcional) Orquestación con Ruflo
+# (Optional) Orchestration with Ruflo
 npx ruflo init
 ```
 
 ---
 
-## Uso rápido
+## Quick Start
 
 ```bash
-# 1. Coloca tu serie temporal en data/serie.csv
-#    Columnas requeridas: ds (fecha), y (valor)
+# 1. Place your time series in data/serie.csv
+#    Required columns: ds (date), y (value)
 
-# 2. Correr baselines
+# 2. Run baselines
 python pipeline/backtest.py --model naive --model seasonal_naive
 
-# 3. Correr feature engineering
+# 3. Run feature engineering
 python pipeline/features.py
 
-# 4. Correr un modelo
+# 4. Train a model
 python pipeline/backtest.py --model lightgbm
 
-# 5. Ver leaderboard
+# 5. View leaderboard
 cat il_libro.json
+```
+
+### Full Orchestration (recommended)
+
+```bash
+# Run the full autonomous swarm loop
+python agents/patron/run.py --budget 50 --paralelo 8 --trials 30
+
+# First time (bootstrap baselines + features automatically):
+python agents/patron/run.py --budget 50 --paralelo 8 --bootstrap
+
+# Launch the live dashboard (http://localhost:5050):
+python dashboard/app.py
 ```
 
 ---
 
-## Formato de datos
+## Data Format
 
 ```csv
 ds,y
@@ -99,14 +112,14 @@ ds,y
 ...
 ```
 
-- `ds`: fecha en formato ISO 8601
-- `y`: valor numérico de la serie
+- `ds`: date in ISO 8601 format
+- `y`: numeric value of the series
 
 ---
 
 ## Il Libro (leaderboard)
 
-`il_libro.json` registra cada experimento:
+`il_libro.json` records every experiment:
 
 ```json
 {
@@ -129,7 +142,7 @@ ds,y
 
 ---
 
-## Influencias técnicas
+## Technical Influences
 
-- **[Ruflo](https://github.com/ruvnet/ruflo)** — capa de orquestación multi-agente para Claude Code (swarm Queen-led, memoria vectorial HNSW via AgentDB)
-- **[autoresearch](https://github.com/karpathy/autoresearch)** — patrón del loop iterativo: editar → backtest → medir → conservar/descartar
+- **[Ruflo](https://github.com/ruvnet/ruflo)** — multi-agent orchestration layer for Claude Code (Queen-led swarm, HNSW vector memory via AgentDB)
+- **[autoresearch](https://github.com/karpathy/autoresearch)** — iterative improvement loop pattern: edit → backtest → measure → keep/discard
