@@ -1,0 +1,24 @@
+# La Mafia — Forecasting Swarm
+# pip install -r requirements.txt
+
+# Core
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+
+# Modelos clásicos
+statsforecast>=1.7       # AutoARIMA, AutoETS, AutoTheta
+
+# Gradient boosting
+lightgbm>=4.0
+xgboost>=2.0
+optuna>=3.0              # HPO
+
+# Deep learning (opcional — requiere más memoria)
+# neuralforecast>=1.7    # N-BEATS, PatchTST — descomentar cuando sea necesario
+
+# Interpretabilidad
+shap>=0.44
+
+# Utilidades
+tqdm>=4.0
