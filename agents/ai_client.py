@@ -17,7 +17,12 @@ import sys
 import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
+
+from agents.logger import get_logger
+
+_log = get_logger('ai_client')
 
 # ── Load .env if present ──────────────────────────────────────────────────────
 _env_path = Path(__file__).parent.parent / '.env'
@@ -47,9 +52,10 @@ if BACKEND == 'api':
         import anthropic as _anthropic
         _client = _anthropic.Anthropic(api_key=_api_key)
     except ImportError:
-        print("⚠️  anthropic SDK not installed, falling back to CLI backend.",
-              file=sys.stderr)
+        _log.warning("anthropic SDK not installed, falling back to CLI backend.")
         BACKEND = 'cli'
+
+_log.info(f"Backend={BACKEND} | Model={MODEL}")
 
 
 def _call_api(system: str, user: str, max_tokens: int) -> str:
@@ -63,13 +69,21 @@ def _call_api(system: str, user: str, max_tokens: int) -> str:
             "ANTHROPIC_API_KEY not set. Copy .env.example → .env and add your key."
         )
 
+    _log.debug(f"API call: model={MODEL}, max_tokens={max_tokens}")
+    t0 = time.time()
     response = _client.messages.create(
         model=MODEL,
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
     )
-    return response.content[0].text
+    elapsed = time.time() - t0
+    text = response.content[0].text
+    usage = getattr(response, 'usage', None)
+    _log.debug(f"API response ({elapsed:.1f}s): {len(text)} chars")
+    if usage:
+        _log.debug(f"  tokens: in={usage.input_tokens}, out={usage.output_tokens}")
+    return text
 
 
 def _call_cli(system: str, user: str, max_tokens: int) -> str:
@@ -90,21 +104,28 @@ def _call_cli(system: str, user: str, max_tokens: int) -> str:
         '--no-session-persistence',
     ]
 
+    _log.debug(f"CLI call: model={MODEL}")
+    _log.debug(f"CLI system prompt ({len(system)} chars): {system[:200]}...")
+    _log.debug(f"CLI user prompt ({len(user)} chars): {user[:300]}...")
+
     # Strip ANTHROPIC_API_KEY from the subprocess environment so the CLI
     # uses OAuth / subscription auth instead of API credits
     cli_env = {k: v for k, v in os.environ.items() if k != 'ANTHROPIC_API_KEY'}
 
+    t0 = time.time()
     result = subprocess.run(
         cmd,
         input=user,
         capture_output=True,
         encoding='utf-8',
         errors='replace',
-        timeout=180,
+        timeout=240,
         env=cli_env,
     )
+    elapsed = time.time() - t0
 
     raw_output = (result.stdout or '').strip()
+    _log.debug(f"CLI raw output ({elapsed:.1f}s, exit={result.returncode}): {len(raw_output)} chars")
 
     # Parse the JSON envelope — the text lives in the "result" field
     try:
@@ -112,19 +133,27 @@ def _call_cli(system: str, user: str, max_tokens: int) -> str:
     except json.JSONDecodeError:
         envelope = None
 
+    # Log usage stats from the CLI envelope
+    if envelope:
+        usage = envelope.get('usage', {})
+        cost = envelope.get('total_cost_usd', 0)
+        _log.debug(f"  CLI usage: in={usage.get('input_tokens',0)}, out={usage.get('output_tokens',0)}, cost=${cost:.4f}")
+
     # The CLI returns exit code 1 for both hard errors and soft errors
     # (e.g. credit issues) but may still provide a JSON response
     if envelope:
         if envelope.get('is_error'):
-            raise RuntimeError(
-                f"Claude CLI error: {envelope.get('result', 'unknown error')}"
-            )
+            err_msg = envelope.get('result', 'unknown error')
+            _log.error(f"CLI error: {err_msg}")
+            raise RuntimeError(f"Claude CLI error: {err_msg}")
         text = envelope.get('result', '')
         if text:
+            _log.debug(f"CLI response text ({len(text)} chars): {text[:300]}...")
             return text
 
     if result.returncode != 0:
         stderr = (result.stderr or '').strip()
+        _log.error(f"CLI exit code {result.returncode}: stderr={stderr[:200]}")
         raise RuntimeError(
             f"Claude CLI exited with code {result.returncode}:\n"
             f"stderr: {stderr}\nstdout: {raw_output[:500]}"
@@ -144,10 +173,17 @@ def call_claude(system: str, user: str, max_tokens: int = 4096) -> str:
 
     Auto-detects if neither is set.
     """
-    if BACKEND == 'api':
-        return _call_api(system, user, max_tokens)
-    else:
-        return _call_cli(system, user, max_tokens)
+    _log.info(f"Calling Claude ({BACKEND}): {len(user)} char prompt")
+    try:
+        if BACKEND == 'api':
+            result = _call_api(system, user, max_tokens)
+        else:
+            result = _call_cli(system, user, max_tokens)
+        _log.info(f"Claude responded: {len(result)} chars")
+        return result
+    except Exception as e:
+        _log.error(f"Claude call failed: {e}")
+        raise
 
 
 def parse_json_response(text: str) -> dict | list:

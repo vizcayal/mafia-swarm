@@ -530,5 +530,98 @@
     ],
     "patron_reasoning": "Fallback: picked top proposals by score.",
     "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-07T13:45:59.949054+00:00",
+    "mae_before": 18.258173116048177,
+    "mae_after": 18.258173116048177,
+    "improved": false,
+    "selected": [
+      "lgbm_selected_nl16_lr017_v2",
+      "lgbm_selected_nl31_lr0165_v2",
+      "lgbm_selected_nl8_lr0175_v2",
+      "artigiano_extended_lags_fourier",
+      "xgb_reg_alpha_d4_v1",
+      "xgb_reg_lambda_d3_v1",
+      "ensemble_top5_xgb_pure_weighted"
+    ],
+    "patron_reasoning": "Budget is 100 and batches_sin_mejora reset to 0 \u2014 ideal conditions for a full parallel sweep. The 7 proposals are genuinely diverse (LightGBM complexity sweep \u00d7 3, XGBoost regularization \u00d7 2, new feature engineering, ensemble), with LightGBM on serie_selected.csv being severely under-tested (only 1 run with broken params). Running all 7 within the paralelo=8 limit maximizes information gain per batch while staying well under budget.",
+    "contabile_reasoning": "XGBoost on data/serie_selected.csv owns the entire top-20, with a locked winning zone: depth 3-4, lr 0.15-0.18, subsample 0.60-0.70, colsample 0.88-0.99. The most glaring gap: LightGBM has never been tested with competitive params on serie_selected.csv \u2014 the sole attempt used lr=0.032 and num_leaves=78 (severe overfit), scoring 33.5 MAE, while LightGBM on the inferior serie_features.csv achieves 25-27. Feature selection accounts for ~7 MAE improvement, confirming the selected feature set is the critical input. Additionally, zero experiments across 46 runs have explored explicit XGBoost regularization (reg_alpha, reg_lambda, gamma, min_child_weight), leaving an entire dimension of variance reduction untouched given fold-5 consistently spikes to 22-24 in even the best models."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-07T13:51:33.006832+00:00",
+    "mae_before": 18.258173116048177,
+    "mae_after": 18.258173116048177,
+    "improved": false,
+    "selected": [
+      "xgb_mae_objective_d4",
+      "xgb_mae_objective_d3",
+      "lgbm_l1_selected_nl16_lr017",
+      "lgbm_l1_selected_nl31_lr0165",
+      "xgb_regularized_minchild_gamma",
+      "ensemble_stacking_top5_xgb"
+    ],
+    "patron_reasoning": "Il Contabile has identified a critical gap: all 47 experiments optimized MSE while measuring MAE \u2014 a fundamental training-evaluation mismatch. The top 4 proposals directly close this gap via reg:absoluteerror / regression_l1 objectives, which have never been tried. With 100 budget remaining, batches_sin_mejora=0, and 6 genuinely diverse proposals (MAE-objective XGBoost \u00d72, MAE-objective LightGBM \u00d72, regularized XGBoost, stacking ensemble), running all 6 in parallel maximizes information gain per batch.",
+    "contabile_reasoning": "XGBoost on data/serie_selected.csv dominates all top-20 results, yet we've been stuck at MAE=18.26 for 7+ batches. The single most critical untested dimension is the loss function: every ML experiment uses MSE (reg:squarederror) while the evaluation metric is MAE \u2014 switching to objective='reg:absoluteerror' directly aligns training with evaluation and is theoretically guaranteed to improve the training signal. LightGBM with objective='regression_l1' on serie_selected.csv is equally untested (only 1 attempt with completely broken params: lr=0.032, nl=78 \u2192 MAE=33.5 vs 25-27 on the inferior feature set). Fold 5 consistently spikes (~23-24 in best models), signaling residual variance that explicit regularization levers (min_child_weight, reg_alpha, gamma) \u2014 absent from all 47 experiments \u2014 could suppress."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-07T13:56:57.831181+00:00",
+    "mae_before": 18.258173116048177,
+    "mae_after": 18.258173116048177,
+    "improved": false,
+    "selected": [
+      "artigiano_volatility_seasonal_diff",
+      "xgb_mae_objective_locked_config",
+      "xgb_dart_booster_d4",
+      "ensemble_top5_xgb_complementary_folds",
+      "xgb_minchild5_gamma03_d4"
+    ],
+    "patron_reasoning": "batches_sin_mejora=1 is well within paciencia=3, and budget=94 is ample. This batch targets 5 genuinely distinct levers: new volatility feature engineering (first use of rolling_std/EWMA/seasonal_diff), MAE objective with the exact winning config (previous MAE runs were confounded by bad HPO), DART booster (never tested), a stronger ensemble of complementary-fold base models, and leaf-level regularization via min_child_weight+gamma. selezionatore_on_vol_features is intentionally excluded \u2014 it has a hard dependency on artigiano_volatility_seasonal_diff completing first and would be wasted in parallel.",
+    "contabile_reasoning": "XGBoost on serie_selected.csv owns all top-20 results with a locked winning zone (depth 3-4, lr 0.15-0.18, sub 0.60-0.70, col 0.88-0.99), yet we've plateaued at MAE=18.26 for 7+ batches despite proposing MAE objectives, regularization, and LightGBM variants. Three dimensions remain genuinely unexplored: (1) the DART booster \u2014 a completely different regularization paradigm from tree-level reg_alpha/gamma, never tried across all 48 runs; (2) volatility features (rolling_std, EWMA) targeting the persistent fold-5 spike (23.72 vs 13.65 in fold 1 = 73% range in the best model, indicating a volatility regime unaddressed by pure lag features); (3) a clean weighted ensemble of the actual top-5 XGBoost models, since previous ensembles used inferior mixed-architecture base models (21.0 MAE). Critical caveat: the June 7 afternoon XGBoost runs (134559, 135132) that reached MAE 34+ had subsample=0.93 and colsample=0.68-0.79 \u2014 wildly outside the winning zone \u2014 suggesting workers are ignoring fixed-param constraints and running random HPO; all proposals must therefore lock the critical params explicitly."
+  },
+  {
+    "batch": 3,
+    "timestamp": "2026-06-07T14:01:25.858067+00:00",
+    "mae_before": 18.258173116048177,
+    "mae_after": 18.258173116048177,
+    "improved": false,
+    "selected": [
+      "lgbm_selected_nl16_lr017_sub063",
+      "lgbm_selected_nl31_lr017_sub065",
+      "xgb_reg_alpha_minchild_locked_d4",
+      "artigiano_volatility_trend_fold5",
+      "ensemble_weighted_top5_xgb_pure"
+    ],
+    "patron_reasoning": "batches_sin_mejora=2 is still within paciencia=3, and the LightGBM proposals are the highest-scored with the top frontier genuinely under-tested (previous LightGBM runs on serie_selected used broken params). I'm selecting 5 diverse proposals \u2014 LightGBM complexity sweep \u00d72, XGBoost L1+min_child regularization, volatility feature engineering, and a clean XGBoost-only ensemble \u2014 while skipping xgb_dart (already ran last batch as xgb_dart_booster_d4) and xgb_mae_objective (run three times across batches 2 and 3 with no gain). If this batch yields no improvement, batches_sin_mejora will hit paciencia=3 and the swarm should stop.",
+    "contabile_reasoning": "XGBoost on data/serie_selected.csv owns all top-20 results with a locked winning zone (depth 3-5, lr 0.15-0.18, subsample 0.60-0.70, colsample 0.88-0.99), yet we've been plateau'd at MAE=18.26 for 7+ batches despite proposing MAE objectives, DART, and L1 regularization \u2014 none of which appear to have been executed with locked params, as evidenced by the June 7 afternoon runs (134559\u2013135657) reaching MAE 33\u201335 with subsample=0.88\u20130.97 clearly outside the winning zone. LightGBM on serie_selected.csv remains the single largest untested frontier: its sole attempt used catastrophically broken params (lr=0.032, nl=78 \u2192 MAE=33.5) while LightGBM on the inferior serie_features.csv achieves MAE=25.5, implying at least 7 MAE is recoverable by applying competitive params to the selected feature set. Fold 5 spikes 4\u201310 MAE above the fold mean in every top model (23.72 vs 13.65 in the best), pinpointing a volatility regime in the most recent CV period that no current feature addresses."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-09T00:25:11.973008+00:00",
+    "mae_before": 18.258173116048177,
+    "mae_after": 18.258173116048177,
+    "improved": false,
+    "selected": [
+      "ensemble_top_models_with_xgb",
+      "feature_selection_top_15"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-09T00:26:46.244899+00:00",
+    "mae_before": 18.258173116048177,
+    "mae_after": 18.258173116048177,
+    "improved": false,
+    "selected": [
+      "lightgbm_hpo_100_trials",
+      "artigiano_expand_rolling_windows"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
   }
 ]

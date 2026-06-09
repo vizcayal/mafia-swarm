@@ -15,7 +15,7 @@
       "costo": "medio",
       "evidencia": "XGBoost and LightGBM are both beating the baseline. Ensembling them should yield further MAE reductions.",
       "score": 0.51,
-      "generado_en": "2026-06-07T13:00:48.510974+00:00"
+      "generado_en": "2026-06-09T00:26:52.972620+00:00"
     },
     {
       "id": "feature_selection_top_15",
@@ -31,7 +31,7 @@
       "costo": "bajo",
       "evidencia": "Reducing the feature count from 20 to 15 can reduce overfitting, especially in tree-based models.",
       "score": 0.325,
-      "generado_en": "2026-06-07T13:00:48.511006+00:00"
+      "generado_en": "2026-06-09T00:26:52.972672+00:00"
     },
     {
       "id": "lightgbm_hpo_100_trials",
@@ -47,7 +47,7 @@
       "costo": "medio",
       "evidencia": "LightGBM was previously run with fewer trials. 100 trials of HPO could close the gap to XGBoost.",
       "score": 0.30000000000000004,
-      "generado_en": "2026-06-07T13:00:48.511015+00:00"
+      "generado_en": "2026-06-09T00:26:52.972685+00:00"
     },
     {
       "id": "artigiano_expand_rolling_windows",
@@ -65,9 +65,9 @@
       "costo": "medio",
       "evidencia": "Adding longer rolling averages will capture longer-term trends in the series.",
       "score": 0.21,
-      "generado_en": "2026-06-07T13:00:48.511023+00:00"
+      "generado_en": "2026-06-09T00:26:52.972695+00:00"
     }
   ],
-  "model": "claude-opus-4-6",
-  "generado_en": "2026-06-07T13:00:48.512810+00:00"
+  "model": "claude-sonnet-4-6",
+  "generado_en": "2026-06-09T00:26:52.975036+00:00"
 }

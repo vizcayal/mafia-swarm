@@ -30,6 +30,7 @@ sys.path.insert(0, ROOT)
 
 from pipeline.evaluate import IlLibro
 from agents.ai_client import call_claude, parse_json_response, MODEL
+from agents.status import update_status
 
 BANNER = """
 ╔══════════════════════════════════════════════════════════╗
@@ -134,6 +135,9 @@ def run_worker(script: str, args_list: list, timeout: int = 600) -> dict:
 
 def llamar_contabile(libro_path: str, budget_left: int, args) -> dict:
     """Run Il Contabile (AI) and return full parsed output."""
+    update_status(phase="analyzing", agents_update={
+        "contabile": {"status": "running", "message": f"Analyzing {libro_path} (Budget left: {budget_left})..."}
+    })
     result = run_worker(
         WORKER_SCRIPTS['contabile'],
         [
@@ -143,19 +147,28 @@ def llamar_contabile(libro_path: str, budget_left: int, args) -> dict:
             '--budget-left',  str(budget_left),
             '--historia',     'agents/patron/historia.json',
         ] + (['--verbose'] if args.verbose else []),
-        timeout=120,
+        timeout=300,  # CLI backend needs more time than API
     )
     if result['status'] != 'ok':
         log(f"Il Contabile failed: {result['stderr'][:200]}", 'error')
+        update_status(agents_update={
+            "contabile": {"status": "idle", "message": "Error running Il Contabile"}
+        })
         return {}
     path = os.path.join(ROOT, 'agents', 'contabile', 'propuestas.json')
     with open(path) as f:
+        update_status(agents_update={
+            "contabile": {"status": "idle", "message": "Analysis finished. Proposals ready."}
+        })
         return json.load(f)
 
 
 def patron_decide(propuestas: list, libro: dict, historia: list,
                   budget_left: int, batches_sin_mejora: int, args) -> dict:
     """Ask Claude (El Patrón) which proposals to execute."""
+    update_status(phase="deciding", agents_update={
+        "patron": {"status": "thinking", "message": "Evaluating proposals and deciding next batch..."}
+    })
     state = {
         'best_mae':            libro.data['best_mae'],
         'best_experiment_id':  libro.data['best_experiment_id'],
@@ -180,6 +193,10 @@ Choose up to {args.paralelo} proposals to run next, or stop the swarm.
     raw = call_claude(PATRON_SYSTEM, user_msg, max_tokens=1024)
     if args.verbose:
         print(f"  Claude: {raw[:400]}")
+    
+    update_status(agents_update={
+        "patron": {"status": "running_loop", "message": "Decision made."}
+    })
     return parse_json_response(raw)
 
 
@@ -267,12 +284,50 @@ def construir_args_worker(propuesta: dict, args) -> tuple:
     return script, args_list
 
 
-def ejecutar_batch(batch: list, args) -> list:
+def ejecutar_batch(batch: list, args, batch_num: int = 1) -> list:
+    import threading
+    lock = threading.Lock()
+    active_runs = {}
+
     def _run(propuesta):
+        worker = propuesta['worker']
+        desc = propuesta['descripcion']
+        prop_id = propuesta['id']
+
+        with lock:
+            active_runs[prop_id] = (worker, desc)
+            worker_msgs = {}
+            for w, d in active_runs.values():
+                worker_msgs.setdefault(w, []).append(d)
+            
+            agents_up = {}
+            for w, descs in worker_msgs.items():
+                agents_up[w] = {"status": "running", "message": " & ".join(descs)}
+            
+            update_status(phase="dispatching", agents_update={
+                "patron": {"status": "running_loop", "message": f"Orchestrating batch {batch_num}..."},
+                **agents_up
+            })
+
         script, worker_args = construir_args_worker(propuesta, args)
         prefix = f"  [{propuesta['worker']}] "
         log(propuesta['descripcion'], 'dispatch', prefix=prefix)
         r = run_worker(script, worker_args, timeout=600)
+        
+        with lock:
+            active_runs.pop(prop_id, None)
+            worker_msgs = {}
+            for w, d in active_runs.values():
+                worker_msgs.setdefault(w, []).append(d)
+            
+            agents_up = {}
+            if worker in worker_msgs:
+                agents_up[worker] = {"status": "running", "message": " & ".join(worker_msgs[worker])}
+            else:
+                agents_up[worker] = {"status": "idle", "message": f"Finished: {desc}"}
+            
+            update_status(agents_update=agents_up)
+
         if r['status'] == 'ok':
             log(f"done in {r['elapsed']:.1f}s", 'ok', prefix=prefix)
             for line in r['stdout'].split('\n'):
@@ -290,6 +345,10 @@ def ejecutar_batch(batch: list, args) -> list:
 
 def bootstrap(args):
     log("━━━ BOOTSTRAP: Features + Baseline ━━━")
+    update_status(phase="bootstrap", agents_update={
+        "patron": {"status": "running_loop", "message": "Running bootstrap phase..."},
+        "libro": {"status": "idle", "message": "Ready"}
+    })
     for label, script, extra in [
         ("L'Artigiano", WORKER_SCRIPTS['artigiano'],
          ['--lags', '1,2,3,6,12,24', '--windows', '3,6,12', '--diffs', '1,12', '--fourier', '12:4']),
@@ -300,9 +359,35 @@ def bootstrap(args):
           '--folds', str(args.folds), '--libro', args.libro]),
     ]:
         log(f"{label}...", 'dispatch')
+        if 'artigiano' in script:
+            update_status(agents_update={"artigiano": {"status": "running", "message": "Generating initial features (lags, rolling windows, Fourier)..."}})
+        elif 'selezionatore' in script:
+            update_status(agents_update={
+                "artigiano": {"status": "idle", "message": "Completed features"},
+                "selezionatore": {"status": "running", "message": "Selecting top 20 features..."}
+            })
+        elif 'modelos' in script:
+            update_status(agents_update={
+                "selezionatore": {"status": "idle", "message": "Completed selection"},
+                "modelos": {"status": "running", "message": "Training Seasonal Naive baseline..."}
+            })
+
         r = run_worker(script, extra, timeout=120)
+        
+        if 'artigiano' in script:
+            update_status(agents_update={"artigiano": {"status": "idle", "message": "Feature engineering complete"}})
+        elif 'selezionatore' in script:
+            update_status(agents_update={"selezionatore": {"status": "idle", "message": "Feature selection complete"}})
+        elif 'modelos' in script:
+            update_status(agents_update={
+                "modelos": {"status": "idle", "message": "Baseline trained successfully"},
+                "libro": {"status": "updating", "message": "Registering Seasonal Naive baseline..."}
+            })
+            
         log("done" if r['status'] == 'ok' else f"failed: {r['stderr'][:80]}",
             'ok' if r['status'] == 'ok' else 'error')
+            
+    update_status(agents_update={"libro": {"status": "idle", "message": "Baseline registered in Il Libro"}})
     print()
 
 
@@ -336,6 +421,10 @@ def main():
 
         print(f"\n{'═'*62}")
         log(f"BATCH {batch_num} — MAE: {mae_actual:.4f} — budget left: {budget_left}")
+
+        update_status(phase="loop", agents_update={
+            "patron": {"status": "running_loop", "message": f"Starting batch {batch_num}. Budget left: {budget_left}."}
+        })
 
         # 1. Il Contabile analyzes and proposes
         log("Consulting Il Contabile (AI)...", 'ai')
@@ -386,10 +475,18 @@ def main():
             log(f"  → {p['descripcion']} [score={p.get('score',0):.3f}]")
 
         # 3. Dispatch batch in parallel
-        results = ejecutar_batch(batch, args)
+        selected_desc = ", ".join(p['id'] for p in batch)
+        update_status(phase="dispatching", agents_update={
+            "patron": {"status": "running_loop", "message": f"Dispatching batch {batch_num}: {selected_desc}"}
+        })
+        results = ejecutar_batch(batch, args, batch_num)
         experimentos_run += len(results)
 
         # 4. Check improvement
+        update_status(phase="evaluating", agents_update={
+            "patron": {"status": "running_loop", "message": "Evaluating results..."},
+            "libro": {"status": "updating", "message": "Updating leaderboards in Il Libro..."}
+        })
         libro    = IlLibro(os.path.join(ROOT, args.libro))
         nuevo_mae = libro.data['best_mae'] or mae_actual
 
@@ -399,9 +496,16 @@ def main():
             log(f"IMPROVEMENT: {mae_actual:.4f} → {nuevo_mae:.4f} ({pct:.1f}%)", 'ok')
             mae_actual = nuevo_mae
             batches_sin_mejora = 0
+            msg = f"Batch {batch_num} done. MAE improved to {nuevo_mae:.4f}!"
         else:
             batches_sin_mejora += 1
             log(f"No significant improvement ({batches_sin_mejora}/{args.paciencia})", 'warn')
+            msg = f"Batch {batch_num} done. No improvement (patience: {batches_sin_mejora}/{args.paciencia})."
+
+        update_status(phase="loop", agents_update={
+            "patron": {"status": "running_loop", "message": msg},
+            "libro": {"status": "idle", "message": f"Current Best MAE: {mae_actual:.4f}"}
+        })
 
         # 5. Log decision to history
         historia.append({
@@ -421,6 +525,15 @@ def main():
             break
 
     # ── Final summary ──────────────────────────────────────────────────────────
+    update_status(phase="completed", agents_update={
+        "patron": {"status": "idle", "message": f"Swarm complete! Final MAE: {mae_actual:.4f}"},
+        "contabile": {"status": "idle", "message": "Done"},
+        "artigiano": {"status": "idle", "message": "Done"},
+        "selezionatore": {"status": "idle", "message": "Done"},
+        "modelos": {"status": "idle", "message": "Done"},
+        "ensemble": {"status": "idle", "message": "Done"},
+        "libro": {"status": "idle", "message": f"Final Best MAE: {mae_actual:.4f}"}
+    })
     print(f"\n{'═'*62}")
     log("SWARM COMPLETE")
     log(f"  Experiments run: {experimentos_run}/{args.budget}")

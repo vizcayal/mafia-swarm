@@ -1,8 +1,9 @@
 {
   "selected_features": [
     "lag_12",
-    "rolling_min_3",
-    "rolling_max_12"
+    "lag_1",
+    "rolling_max_24",
+    "lag_2"
   ],
   "method": "mutual_info",
   "top_k": 15

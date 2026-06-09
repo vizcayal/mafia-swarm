@@ -6,6 +6,13 @@ Se actualiza automáticamente cada 3 segundos.
 """
 
 import sys, os, json
+
+# Reconfigure stdout/stderr to UTF-8 to prevent encoding crashes on Windows consoles
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 from datetime import datetime
 from flask import Flask, jsonify, render_template_string
 
@@ -14,13 +21,14 @@ sys.path.insert(0, ROOT)
 
 LIBRO_PATH      = os.path.join(ROOT, 'il_libro.json')
 PROPUESTAS_PATH = os.path.join(ROOT, 'agents', 'contabile', 'propuestas.json')
+STATUS_PATH     = os.path.join(ROOT, 'logs', 'status.json')
 
 app = Flask(__name__)
 
 
 def read_json(path):
     try:
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return json.load(f)
     except Exception:
         return None
@@ -30,6 +38,18 @@ def read_json(path):
 def api_data():
     libro      = read_json(LIBRO_PATH) or {}
     propuestas = read_json(PROPUESTAS_PATH) or {}
+    status     = read_json(STATUS_PATH) or {
+        "phase": "idle",
+        "agents": {
+            "patron": {"status": "idle", "message": "Not running"},
+            "contabile": {"status": "idle", "message": "Not running"},
+            "artigiano": {"status": "idle", "message": "Not running"},
+            "selezionatore": {"status": "idle", "message": "Not running"},
+            "modelos": {"status": "idle", "message": "Not running"},
+            "ensemble": {"status": "idle", "message": "Not running"},
+            "libro": {"status": "idle", "message": "Ready"}
+        }
+    }
 
     experiments = libro.get('experiments', [])
     experiments_sorted = sorted(experiments, key=lambda e: e.get('mae_mean', 9999))
@@ -60,6 +80,7 @@ def api_data():
         'mae_timeline':   mae_timeline,
         'propuestas':     propuestas.get('propuestas', [])[:6],
         'updated_at':     datetime.now().strftime('%H:%M:%S'),
+        'status':         status,
     })
 
 
@@ -132,6 +153,188 @@ HTML = r"""<!DOCTYPE html>
   .costo-medio { border-top: 2px solid #c9a84c; }
   .costo-alto  { border-top: 2px solid #cf5050; }
 
+  /* Diagram Panel Styles */
+  .diagram-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 0 24px 12px;
+  }
+  .diagram-panel h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--gold);
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .phase-badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    color: var(--text);
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+  }
+  .phase-bootstrap { border-color: var(--gold); color: var(--gold); }
+  .phase-analyzing { border-color: #3a8ee6; color: #3a8ee6; }
+  .phase-deciding { border-color: #a88be6; color: #a88be6; }
+  .phase-dispatching { border-color: var(--green); color: var(--green); }
+  .phase-evaluating { border-color: var(--gold); color: var(--gold); }
+  .phase-completed { border-color: #888; color: #888; }
+  .phase-idle { border-color: var(--muted); color: var(--muted); }
+
+  .diagram-content {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .diagram-svg-wrap {
+    flex: 1.8;
+    position: relative;
+    border: 1px solid #1a1a1a;
+    background: #090909;
+    border-radius: 6px;
+    padding: 10px;
+  }
+  .diagram-details {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 11px;
+    height: 310px;
+    display: flex;
+    flex-direction: column;
+  }
+  .diagram-details h3 {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--sub);
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+    flex-shrink: 0;
+  }
+  .agent-status-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .agent-status-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 6px 0;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .agent-status-row:last-child {
+    border-bottom: none;
+  }
+  .agent-status-row .name {
+    font-weight: bold;
+    min-width: 95px;
+    color: var(--text);
+    font-size: 11px;
+  }
+  .agent-status-row .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 8px;
+    margin-top: 5px;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+  .status-dot.idle { background: var(--muted); }
+  .status-dot.thinking { background: #c9a84c; box-shadow: 0 0 8px #c9a84c; animation: pulse 2s infinite; }
+  .status-dot.running { background: #4caf77; box-shadow: 0 0 8px #4caf77; animation: pulse 2s infinite; }
+  .status-dot.updating { background: #3a8ee6; box-shadow: 0 0 8px #3a8ee6; animation: pulse 2s infinite; }
+  .status-dot.success { background: #4caf77; }
+  .status-dot.error { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  
+  .agent-status-row .message {
+    color: var(--sub);
+    font-size: 11px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+
+  /* SVG styling */
+  .node {
+    cursor: pointer;
+  }
+  .node circle {
+    fill: #141414;
+    stroke: var(--border);
+    stroke-width: 2px;
+    transition: all 0.3s ease;
+  }
+  .node text {
+    fill: var(--text);
+    transition: all 0.3s ease;
+    user-select: none;
+  }
+  .node.state-thinking circle {
+    stroke: var(--gold);
+    fill: #221d12;
+    filter: drop-shadow(0px 0px 6px rgba(201,168,76,0.5));
+  }
+  .node.state-running circle {
+    stroke: var(--green);
+    fill: #112017;
+    filter: drop-shadow(0px 0px 6px rgba(76,175,119,0.5));
+  }
+  .node.state-updating circle {
+    stroke: #3a8ee6;
+    fill: #111a24;
+    filter: drop-shadow(0px 0px 6px rgba(58,142,230,0.5));
+  }
+  .node.state-error circle {
+    stroke: var(--red);
+    fill: #241111;
+    filter: drop-shadow(0px 0px 6px rgba(207,80,80,0.5));
+  }
+
+  .link {
+    stroke: #222;
+    stroke-width: 1.5px;
+    transition: all 0.3s ease;
+  }
+  .link-active {
+    stroke: var(--gold);
+    stroke-width: 2px;
+    stroke-dasharray: 6, 6;
+    animation: link-flow 1.5s linear infinite;
+    filter: drop-shadow(0px 0px 3px rgba(201,168,76,0.3));
+    marker-end: url(#arrow-active) !important;
+  }
+  @keyframes link-flow {
+    to {
+      stroke-dashoffset: -20;
+    }
+  }
+
+  /* Responsive layout for diagram content */
+  @media (max-width: 850px) {
+    .diagram-content {
+      flex-direction: column;
+    }
+    .diagram-details {
+      width: 100%;
+      height: 180px;
+    }
+  }
+
   footer { text-align: center; color: var(--muted); font-size: 10px; padding: 12px; border-top: 1px solid var(--border); }
   #updated { color: var(--sub); }
 </style>
@@ -170,6 +373,93 @@ HTML = r"""<!DOCTYPE html>
     <div class="label">Experiments</div>
     <div class="value" id="n-exp" style="color:var(--text)">—</div>
     <div class="hint">in Il Libro</div>
+  </div>
+</div>
+
+<!-- Real-time Swarm Diagram Panel -->
+<div class="diagram-panel">
+  <h2>🕵️‍♂️ Swarm Real-Time Diagram <span id="swarm-phase-badge" class="phase-badge phase-idle">idle</span></h2>
+  <div class="diagram-content">
+    <div class="diagram-svg-wrap">
+      <svg viewBox="0 0 800 320" style="width: 100%; height: auto; display: block;">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="#222" />
+          </marker>
+          <marker id="arrow-active" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--gold)" />
+          </marker>
+        </defs>
+
+        <!-- Links -->
+        <path id="link-libro-contabile" class="link" d="M 400 270 Q 250 250 150 160" fill="none" marker-end="url(#arrow)" />
+        <path id="link-contabile-patron" class="link" d="M 150 160 Q 250 70 400 50" fill="none" marker-end="url(#arrow)" />
+        
+        <path id="link-patron-artigiano" class="link" d="M 400 50 Q 520 40 650 60" fill="none" marker-end="url(#arrow)" />
+        <path id="link-patron-selezionatore" class="link" d="M 400 50 Q 525 80 650 130" fill="none" marker-end="url(#arrow)" />
+        <path id="link-patron-modelos" class="link" d="M 400 50 Q 515 130 650 200" fill="none" marker-end="url(#arrow)" />
+        <path id="link-patron-ensemble" class="link" d="M 400 50 Q 510 170 650 270" fill="none" marker-end="url(#arrow)" />
+
+        <path id="link-artigiano-libro" class="link" d="M 650 60 Q 540 180 400 270" fill="none" marker-end="url(#arrow)" />
+        <path id="link-selezionatore-libro" class="link" d="M 650 130 Q 540 215 400 270" fill="none" marker-end="url(#arrow)" />
+        <path id="link-modelos-libro" class="link" d="M 650 200 Q 540 245 400 270" fill="none" marker-end="url(#arrow)" />
+        <path id="link-ensemble-libro" class="link" d="M 650 270 Q 525 285 400 270" fill="none" marker-end="url(#arrow)" />
+
+        <!-- Nodes -->
+        <g id="node-patron" class="node" transform="translate(400, 50)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="18">💼</text>
+          <text text-anchor="middle" dy="36" font-size="10" font-weight="bold" fill="#fff">EL PATRÓN</text>
+          <title>El Patrón (AI Orchestrator)</title>
+        </g>
+
+        <g id="node-contabile" class="node" transform="translate(150, 160)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="18">📖</text>
+          <text text-anchor="middle" dy="36" font-size="10" font-weight="bold" fill="#fff">IL CONTABILE</text>
+          <title>Il Contabile (AI Analyst)</title>
+        </g>
+
+        <g id="node-libro" class="node" transform="translate(400, 270)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="18">💾</text>
+          <text text-anchor="middle" dy="36" font-size="10" font-weight="bold" fill="#fff">IL LIBRO</text>
+          <title>Il Libro (Database)</title>
+        </g>
+
+        <g id="node-artigiano" class="node" transform="translate(650, 60)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="16">🛠️</text>
+          <text text-anchor="start" dx="30" dy="4" font-size="10" font-weight="bold" fill="#ccc">L'ARTIGIANO</text>
+          <title>L'Artigiano (Feature Engineer)</title>
+        </g>
+
+        <g id="node-selezionatore" class="node" transform="translate(650, 130)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="16">🔍</text>
+          <text text-anchor="start" dx="30" dy="4" font-size="10" font-weight="bold" fill="#ccc">IL SELEZIONATORE</text>
+          <title>Il Selezionatore (Feature Selector)</title>
+        </g>
+
+        <g id="node-modelos" class="node" transform="translate(650, 200)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="16">🤖</text>
+          <text text-anchor="start" dx="30" dy="4" font-size="10" font-weight="bold" fill="#ccc">MODELOS</text>
+          <title>Worker Modelos (Model Training & HPO)</title>
+        </g>
+
+        <g id="node-ensemble" class="node" transform="translate(650, 270)">
+          <circle r="22" />
+          <text text-anchor="middle" dy="6" font-size="16">🔗</text>
+          <text text-anchor="start" dx="30" dy="4" font-size="10" font-weight="bold" fill="#ccc">ENSEMBLE</text>
+          <title>Ensemble Worker (Blender/Stacker)</title>
+        </g>
+      </svg>
+    </div>
+    <div class="diagram-details">
+      <h3>Agent Activities</h3>
+      <div id="agent-details-list" class="agent-status-list"></div>
+    </div>
   </div>
 </div>
 
@@ -297,6 +587,112 @@ function renderChart(timeline, baselineMae) {
   });
 }
 
+function updatePhaseBadge(phase) {
+  const badge = document.getElementById('swarm-phase-badge');
+  if (!badge) return;
+  badge.textContent = phase;
+  badge.className = 'phase-badge';
+  badge.classList.add('phase-' + phase);
+}
+
+function renderAgentDetails(agents) {
+  const el = document.getElementById('agent-details-list');
+  if (!el) return;
+  
+  const order = ['patron', 'contabile', 'artigiano', 'selezionatore', 'modelos', 'ensemble', 'libro'];
+  const nameMap = {
+    'patron': 'El Patrón',
+    'contabile': 'Il Contabile',
+    'artigiano': 'L\'Artigiano',
+    'selezionatore': 'Il Selezionatore',
+    'modelos': 'Modelos',
+    'ensemble': 'Ensemble',
+    'libro': 'Il Libro'
+  };
+
+  el.innerHTML = order.map(k => {
+    const a = agents[k] || { status: 'idle', message: k === 'libro' ? 'Ready' : 'Not running' };
+    const statusClass = a.status || 'idle';
+    const message = a.message || 'Idle';
+    
+    return `
+      <div class="agent-status-row">
+        <span class="status-dot ${statusClass}"></span>
+        <span class="name">${nameMap[k]}</span>
+        <span class="message">${message}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function activateLink(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.add('link-active');
+  }
+}
+
+function updateDiagram(statusObj) {
+  const phase = statusObj.phase || 'idle';
+  const agents = statusObj.agents || {};
+
+  updatePhaseBadge(phase);
+  renderAgentDetails(agents);
+
+  // 1. Reset all nodes
+  const nodes = ['patron', 'contabile', 'artigiano', 'selezionatore', 'modelos', 'ensemble', 'libro'];
+  nodes.forEach(n => {
+    const nodeEl = document.getElementById('node-' + n);
+    if (!nodeEl) return;
+    
+    nodeEl.classList.remove('state-idle', 'state-thinking', 'state-running', 'state-updating', 'state-error');
+    
+    const agentState = agents[n] ? agents[n].status : 'idle';
+    const msg = agents[n] ? agents[n].message : '';
+    nodeEl.classList.add('state-' + agentState);
+    
+    const titleEl = nodeEl.querySelector('title');
+    if (titleEl) titleEl.textContent = n.toUpperCase() + ' (' + agentState + ')\n' + msg;
+  });
+
+  // Reset all links
+  const links = document.querySelectorAll('.link');
+  links.forEach(l => {
+    l.classList.remove('link-active');
+  });
+
+  // 2. Activate links based on phase and agent activity
+  if (phase === 'analyzing') {
+    activateLink('link-libro-contabile');
+  } else if (phase === 'deciding') {
+    activateLink('link-contabile-patron');
+  } else if (phase === 'dispatching') {
+    if (agents.artigiano && agents.artigiano.status === 'running') activateLink('link-patron-artigiano');
+    if (agents.selezionatore && agents.selezionatore.status === 'running') activateLink('link-patron-selezionatore');
+    if (agents.modelos && agents.modelos.status === 'running') activateLink('link-patron-modelos');
+    if (agents.ensemble && agents.ensemble.status === 'running') activateLink('link-patron-ensemble');
+  } else if (phase === 'evaluating') {
+    if (agents.artigiano && agents.artigiano.status === 'running') activateLink('link-artigiano-libro');
+    if (agents.selezionatore && agents.selezionatore.status === 'running') activateLink('link-selezionatore-libro');
+    if (agents.modelos && agents.modelos.status === 'running') activateLink('link-modelos-libro');
+    if (agents.ensemble && agents.ensemble.status === 'running') activateLink('link-ensemble-libro');
+  } else if (phase === 'bootstrap') {
+    if (agents.artigiano && agents.artigiano.status === 'running') {
+      activateLink('link-patron-artigiano');
+    } else if (agents.selezionatore && agents.selezionatore.status === 'running') {
+      activateLink('link-patron-selezionatore');
+    } else if (agents.modelos && agents.modelos.status === 'running') {
+      activateLink('link-patron-modelos');
+    }
+    
+    if (agents.libro && agents.libro.status === 'updating') {
+      if (agents.artigiano && agents.artigiano.message && agents.artigiano.message.includes('complete')) activateLink('link-artigiano-libro');
+      if (agents.selezionatore && agents.selezionatore.message && agents.selezionatore.message.includes('complete')) activateLink('link-selezionatore-libro');
+      if (agents.modelos && agents.modelos.message && agents.modelos.message.includes('Baseline')) activateLink('link-modelos-libro');
+    }
+  }
+}
+
 async function refresh() {
   try {
     const r = await fetch('/api/data');
@@ -316,13 +712,16 @@ async function refresh() {
     renderLeaderboard(d.leaderboard, d.best_id);
     renderMini(d.propuestas);
     renderChart(d.mae_timeline, d.baseline_mae);
+    if (d.status) {
+      updateDiagram(d.status);
+    }
   } catch (e) {
     console.warn('refresh error', e);
   }
 }
 
 refresh();
-setInterval(refresh, 5000);
+setInterval(refresh, 3000); // Poll every 3 seconds for smoother updates
 </script>
 </body>
 </html>"""
