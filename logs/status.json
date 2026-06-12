@@ -1,10 +1,10 @@
 {
   "phase": "completed",
-  "updated_at": "19:26:53",
+  "updated_at": "18:01:57",
   "agents": {
     "patron": {
       "status": "idle",
-      "message": "Swarm complete! Final MAE: 18.2582"
+      "message": "Swarm complete! Final MAE: 20.3715"
     },
     "contabile": {
       "status": "idle",
@@ -28,7 +28,7 @@
     },
     "libro": {
       "status": "idle",
-      "message": "Final Best MAE: 18.2582"
+      "message": "Final Best MAE: 20.3715"
     }
   }
 }

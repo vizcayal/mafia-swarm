@@ -24,23 +24,7 @@ BANNER = """
 ╚══════════════════════════════════════════════════╝
 """
 
-SYSTEM_PROMPT = """\
-You are Il Contabile, the strategic analyst of La Mafia — an autonomous ML \
-forecasting agent swarm optimizing MAE on univariate time series.
-
-Your job: analyze the experiment history in Il Libro and propose the most \
-promising next experiments for El Patrón to execute.
-
-## Rules
-- Minimize MAE on rolling-origin cross-validation (5 folds, fixed horizon).
-- Seasonal Naive is the mandatory baseline. Every ML model must beat it.
-- Available workers: modelos (lightgbm, xgboost, random_forest, seasonal_naive, naive), \
-ensemble (weighted, stacking), artigiano (feature engineering), \
-selezionatore (feature selection).
-- Score proposals by expected impact, not just familiarity.
-- Be specific: include exact model names, hyperparameter strategies, and \
-feature configs in args_worker.
-- Explain your reasoning concisely in evidencia.
+OUTPUT_FORMAT = """\
 
 ## Output format
 Return ONLY a JSON object — no prose before or after:
@@ -66,6 +50,26 @@ Score = abs(mae_delta_esperado) * confianza / cost_num  (bajo=1, medio=2, alto=4
 Return the top proposals sorted by score descending.
 """
 
+SYSTEM_PROMPT_BASE = """\
+You are Il Contabile, the strategic analyst of La Mafia — an autonomous ML \
+forecasting agent swarm optimizing MAE on univariate time series.
+
+Your research program is defined below in program.md. Follow its directions, \
+prioritize the unexplored angles it identifies, and avoid repeating what has \
+already failed.
+
+"""
+
+
+def load_system_prompt(program_path: str) -> str:
+    """Build system prompt by injecting program.md content."""
+    if os.path.exists(program_path):
+        with open(program_path, encoding='utf-8') as f:
+            program_content = f.read()
+        return SYSTEM_PROMPT_BASE + program_content + OUTPUT_FORMAT
+    # Fallback: minimal prompt without program.md
+    return SYSTEM_PROMPT_BASE + OUTPUT_FORMAT
+
 
 def build_user_prompt(libro: dict, budget_restante: int, historia: list) -> str:
     experiments = libro.get('experiments', [])
@@ -79,8 +83,13 @@ def build_user_prompt(libro: dict, budget_restante: int, historia: list) -> str:
     models_tried = list({e.get('model') for e in experiments})
     beats = [e for e in experiments if e.get('beats_baseline')]
 
+    sorted_exp = sorted(experiments, key=lambda x: x.get('mae_mean', 9999))
+    # Send only top 15 + last 3 recent experiments to keep the prompt manageable
+    recent = [e for e in experiments[-3:] if e not in sorted_exp[:15]]
+    top_exp = sorted_exp[:15] + recent
+
     exp_summary = []
-    for e in sorted(experiments, key=lambda x: x.get('mae_mean', 9999)):
+    for e in top_exp:
         exp_summary.append({
             'id':              e['id'],
             'model':           e.get('model'),
@@ -95,7 +104,7 @@ def build_user_prompt(libro: dict, budget_restante: int, historia: list) -> str:
 
 Best MAE: {best_mae} (experiment: {best_id})
 Baseline MAE (Seasonal Naive): {baseline_mae}
-Total experiments: {len(experiments)}
+Total experiments: {len(experiments)} (showing top 15 + 3 most recent)
 Models tried: {models_tried}
 Experiments beating baseline: {len(beats)}
 Budget remaining: {budget_restante} experiments
@@ -107,9 +116,9 @@ Budget remaining: {budget_restante} experiments
 
     if historia:
         prompt += f"""
-## El Patrón's decision history (last decisions)
+## El Patrón's decision history (last 3 decisions)
 
-{json.dumps(historia[-5:], indent=2)}
+{json.dumps(historia[-3:], indent=2)}
 """
 
     prompt += """
@@ -131,6 +140,7 @@ def parse_args():
     p.add_argument('--top-k',        type=int, default=6)
     p.add_argument('--budget-left',  type=int, default=99, help='Budget remaining (passed by El Patrón)')
     p.add_argument('--historia',     default='agents/patron/historia.json', help='Path to patron decision history')
+    p.add_argument('--program',      default='program.md', help='Research program markdown file')
     p.add_argument('--verbose',      action='store_true')
     return p.parse_args()
 
@@ -253,8 +263,14 @@ def main():
         print(user_prompt[:800])
         print("─────────────────────────────────────\n")
 
+    program_path = os.path.join(ROOT, args.program)
+    system_prompt = load_system_prompt(program_path)
+    if args.verbose:
+        using = args.program if os.path.exists(program_path) else "built-in prompt (program.md not found)"
+        print(f"📋 Using research program: {using}\n")
+
     try:
-        raw = call_claude(SYSTEM_PROMPT, user_prompt, max_tokens=4096)
+        raw = call_claude(system_prompt, user_prompt, max_tokens=4096)
         if args.verbose:
             print("── Claude response ──────────────────")
             print(raw[:1200])

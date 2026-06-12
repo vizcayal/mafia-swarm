@@ -119,7 +119,7 @@ def _call_cli(system: str, user: str, max_tokens: int) -> str:
         capture_output=True,
         encoding='utf-8',
         errors='replace',
-        timeout=240,
+        timeout=480,
         env=cli_env,
     )
     elapsed = time.time() - t0

@@ -14,6 +14,7 @@ import argparse
 import sys
 import os
 import json
+import re
 import time
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -80,6 +81,44 @@ in the next batch.
 """
 
 
+def update_program_md(program_path: str, libro: dict):
+    """Replace the <!-- AUTO-UPDATED --> block in program.md with current best results."""
+    if not os.path.exists(program_path):
+        return
+    best_mae   = libro.data.get('best_mae')
+    best_id    = libro.data.get('best_experiment_id')
+    n_exp      = len(libro.data.get('experiments', []))
+    best_exp   = next((e for e in libro.data['experiments'] if e['id'] == best_id), None)
+    model_desc = ''
+    if best_exp:
+        cfg = best_exp.get('config', {})
+        parts = [best_exp.get('model', '')]
+        for k, v in cfg.items():
+            parts.append(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}")
+        model_desc = ' | '.join(parts)
+    features = (best_exp or {}).get('features_pipeline', 'data/serie_selected.csv')
+
+    new_block = (
+        f"<!-- AUTO-UPDATED by El Patrón — do not edit this block manually -->\n"
+        f"- **Mejor MAE**: {best_mae:.6f} ({best_id})\n"
+        f"- **Modelo**: {model_desc}\n"
+        f"- **Features**: {features}\n"
+        f"- **Total experimentos acumulados**: {n_exp}\n"
+        f"<!-- END AUTO-UPDATE -->"
+    )
+    with open(program_path, encoding='utf-8') as f:
+        content = f.read()
+    updated = re.sub(
+        r'<!-- AUTO-UPDATED.*?<!-- END AUTO-UPDATE -->',
+        new_block,
+        content,
+        flags=re.DOTALL,
+    )
+    if updated != content:
+        with open(program_path, 'w', encoding='utf-8') as f:
+            f.write(updated)
+
+
 def parse_args():
     p = argparse.ArgumentParser(description='El Patrón: AI orchestration loop')
     p.add_argument('--budget',     type=int,   default=8,           help='Max experiments to run')
@@ -91,6 +130,7 @@ def parse_args():
     p.add_argument('--paciencia',  type=int,   default=3,           help='Batches without improvement before stopping')
     p.add_argument('--min-mejora', type=float, default=0.01,        help='Min MAE improvement fraction to count')
     p.add_argument('--bootstrap',  action='store_true',             help='Run features + baseline before loop')
+    p.add_argument('--program',    default='program.md',            help='Research program markdown file')
     p.add_argument('--verbose',    action='store_true')
     return p.parse_args()
 
@@ -146,8 +186,9 @@ def llamar_contabile(libro_path: str, budget_left: int, args) -> dict:
             '--top-k',        str(args.paralelo * 3),
             '--budget-left',  str(budget_left),
             '--historia',     'agents/patron/historia.json',
+            '--program',      args.program,
         ] + (['--verbose'] if args.verbose else []),
-        timeout=300,  # CLI backend needs more time than API
+        timeout=300,
     )
     if result['status'] != 'ok':
         log(f"Il Contabile failed: {result['stderr'][:200]}", 'error')
@@ -496,6 +537,7 @@ def main():
             log(f"IMPROVEMENT: {mae_actual:.4f} → {nuevo_mae:.4f} ({pct:.1f}%)", 'ok')
             mae_actual = nuevo_mae
             batches_sin_mejora = 0
+            update_program_md(os.path.join(ROOT, args.program), libro)
             msg = f"Batch {batch_num} done. MAE improved to {nuevo_mae:.4f}!"
         else:
             batches_sin_mejora += 1

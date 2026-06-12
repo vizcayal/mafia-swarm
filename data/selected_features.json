@@ -1,10 +1,15 @@
 {
   "selected_features": [
-    "lag_12",
     "lag_1",
-    "rolling_max_24",
-    "lag_2"
+    "lag_2",
+    "lag_3",
+    "lag_6",
+    "lag_12",
+    "rolling_std_3",
+    "rolling_std_6",
+    "diff_1",
+    "diff_12"
   ],
-  "method": "mutual_info",
-  "top_k": 15
+  "method": "lightgbm_importance",
+  "top_k": 20
 }
