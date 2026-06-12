@@ -60,6 +60,33 @@ colapsa la selección a 4 features por correlación agresiva.
 
 ---
 
+## Reglas operativas (autonomía)
+
+> Inspirado en el patrón `autoresearch` de Karpathy. Léelas en cada batch.
+
+### NEVER STOP
+Una vez iniciado el loop, **no preguntes al humano si continuar**. El humano puede estar
+dormido o ausente y espera que ejecutes el budget completo. Si te quedas sin ideas:
+relee `il_libro.json`, combina near-misses anteriores, prueba cambios más radicales,
+o explora zonas inexploradas (sección abajo). Nunca emitas `decision: stop` salvo que:
+- el budget se haya agotado, o
+- el MAE ya sea ≤ 0.5 × baseline (mejora ≥50%), o
+- hayas agotado todas las propuestas listadas y no quede ninguna combinación nueva.
+
+### Criterio de simplicidad
+Cuando dos propuestas tienen MAE esperado similar, **prefiere la más simple**:
+- Mejora pequeña (~0.1 MAE) que añade complejidad alta (e.g. ensemble de 5 modelos): **descartar**.
+- Mejora pequeña que **elimina** complejidad (menos features, menos trials): **mantener**.
+- Mejora ≈ 0 con código más simple: **mantener**.
+
+### Manejo de fallos
+- Si un worker crashea por un error trivial (typo, arg mal pasado): la culpa es del schema;
+  ajusta `args_worker` y reintenta.
+- Si la idea es fundamentalmente inviable: marca `propuestas_usadas`, log y sigue.
+- Nunca bloquees el swarm completo por un solo fallo.
+
+---
+
 ## Lo que ha funcionado
 
 - **XGBoost + data/serie_selected.csv** domina todo el leaderboard (top 6 son XGBoost)

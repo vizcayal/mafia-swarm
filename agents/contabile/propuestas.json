@@ -1,25 +1,24 @@
 {
-  "reasoning": "The current best model is XGBoost (MAE 20.37) using full features (serie_features.csv). There's a persistent high variance in MAE across folds, indicating overfitting or inability to generalize to later, more volatile periods. The 'Lo que ha funcionado' section is somewhat contradictory with 'Estado actual' regarding selected vs. full features, but the current best uses full. Ensembles, LightGBM, and Random Forest have consistently underperformed. We need to focus on fundamental XGBoost improvements and careful feature selection.",
+  "reasoning": "The current best model is XGBoost (MAE 20.37) using the full feature set (`data/serie_features.csv`). A critical observation is the high variance in MAE across folds (e.g., 11.81 vs 27.75 for the best model), suggesting overfitting or a failure to adapt to changing series dynamics in later periods. The previous attempt to align the objective with MAE (`reg:absoluteerror`) did not yield an improvement. Therefore, the focus must shift to explicit regularization to combat overfitting and the generation of new features that capture volatility or regime changes.",
   "propuestas": [
     {
-      "id": "xgboost_objective_mae",
-      "descripcion": "Run XGBoost HPO with objective='reg:absoluteerror' to align training with the MAE evaluation metric.",
+      "id": "xgboost_regularization_hpo",
+      "descripcion": "Optimize XGBoost with explicit regularization parameters (gamma, reg_alpha, reg_lambda, min_child_weight) to combat overfitting and reduce MAE variance across folds.",
       "worker": "modelos",
       "accion": "run_model",
       "args_worker": {
         "model": "xgboost",
         "data": "data/serie_features.csv",
-        "trials": 30,
-        "objective": "reg:absoluteerror"
+        "trials": 30
       },
-      "mae_delta_esperado": -3.0,
+      "mae_delta_esperado": -2.5,
       "confianza": 0.9,
       "costo": "medio",
-      "score": 1.35,
-      "evidencia": "This is the most direct unexplored angle identified. Aligning the objective function with the evaluation metric (MAE) is a fundamental improvement that could",
-      "generado_en": "2026-06-12T20:06:59.646474+00:00"
+      "score": 1.125,
+      "evidencia": "This directly addresses the high MAE variance",
+      "generado_en": "2026-06-12T20:09:18.884182+00:00"
     }
   ],
   "model": "gemini-2.5-flash",
-  "generado_en": "2026-06-12T20:06:59.647791+00:00"
+  "generado_en": "2026-06-12T20:09:18.885109+00:00"
 }

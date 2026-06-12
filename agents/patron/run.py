@@ -131,6 +131,9 @@ def parse_args():
     p.add_argument('--min-mejora', type=float, default=0.01,        help='Min MAE improvement fraction to count')
     p.add_argument('--bootstrap',  action='store_true',             help='Run features + baseline before loop')
     p.add_argument('--program',    default='program.md',            help='Research program markdown file')
+    p.add_argument('--worker-timeout', type=int, default=600,       help='Per-worker timeout in seconds (kills hung Optuna/HPO)')
+    p.add_argument('--git-versioning', action='store_true',         help='Commit il_libro.json after each batch; reset if no improvement')
+    p.add_argument('--git-branch', default=None,                    help='Branch name for git versioning (default: autoresearch/<UTC date>)')
     p.add_argument('--verbose',    action='store_true')
     return p.parse_args()
 
@@ -168,9 +171,56 @@ def run_worker(script: str, args_list: list, timeout: int = 600) -> dict:
             'stderr':  result.stderr or '',
         }
     except subprocess.TimeoutExpired:
-        return {'status': 'timeout', 'elapsed': timeout, 'stdout': '', 'stderr': 'timeout'}
+        return {'status': 'timeout', 'elapsed': timeout, 'stdout': '', 'stderr': f'timeout after {timeout}s'}
     except Exception as e:
         return {'status': 'exception', 'elapsed': 0, 'stdout': '', 'stderr': str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Git versioning (autoresearch-style: commit per batch, reset if no improvement)
+# ---------------------------------------------------------------------------
+
+def _git(*args, check: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(['git', *args], cwd=ROOT, capture_output=True,
+                          text=True, encoding='utf-8', errors='replace', check=check)
+
+def git_setup_branch(branch: str | None) -> str | None:
+    """Create/checkout autoresearch branch. Returns active branch name, or None if git unavailable."""
+    if _git('rev-parse', '--git-dir').returncode != 0:
+        log("Git versioning requested but no git repo found — skipping", 'warn')
+        return None
+    if branch is None:
+        branch = f"autoresearch/{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    existing = _git('rev-parse', '--verify', branch).returncode == 0
+    if existing:
+        log(f"Reusing existing branch: {branch}", 'info')
+        _git('checkout', branch)
+    else:
+        log(f"Creating branch: {branch}", 'info')
+        _git('checkout', '-b', branch)
+    return branch
+
+def git_commit_experiment(batch_num: int, exp_ids: list, mae: float) -> str | None:
+    """Stage il_libro + history + data, commit. Returns short SHA or None."""
+    _git('add', 'il_libro.json', 'agents/patron/historia.json', 'data/', 'agents/contabile/propuestas.json')
+    status = _git('status', '--porcelain').stdout.strip()
+    if not status:
+        return None
+    msg = f"batch {batch_num}: MAE={mae:.4f} | {', '.join(exp_ids[:3])}"
+    res = _git('commit', '-m', msg)
+    if res.returncode != 0:
+        log(f"git commit failed: {res.stderr[:120]}", 'warn')
+        return None
+    sha = _git('rev-parse', '--short', 'HEAD').stdout.strip()
+    return sha or None
+
+def git_reset_last() -> bool:
+    """Hard reset to previous commit (discard batch)."""
+    res = _git('reset', '--hard', 'HEAD~1')
+    if res.returncode != 0:
+        log(f"git reset failed: {res.stderr[:120]}", 'warn')
+        return False
+    return True
 
 
 def llamar_contabile(libro_path: str, budget_left: int, args) -> dict:
@@ -353,7 +403,7 @@ def ejecutar_batch(batch: list, args, batch_num: int = 1) -> list:
         script, worker_args = construir_args_worker(propuesta, args)
         prefix = f"  [{propuesta['worker']}] "
         log(propuesta['descripcion'], 'dispatch', prefix=prefix)
-        r = run_worker(script, worker_args, timeout=600)
+        r = run_worker(script, worker_args, timeout=args.worker_timeout)
         
         with lock:
             active_runs.pop(prop_id, None)
@@ -440,6 +490,10 @@ def main():
     print()
 
     libro = IlLibro(os.path.join(ROOT, args.libro))
+
+    git_branch = None
+    if args.git_versioning:
+        git_branch = git_setup_branch(args.git_branch)
 
     if args.bootstrap or len(libro.data['experiments']) == 0:
         bootstrap(args)
@@ -541,6 +595,14 @@ def main():
         libro    = IlLibro(os.path.join(ROOT, args.libro))
         nuevo_mae = libro.data['best_mae'] or mae_actual
 
+        # results.tsv mirror (autoresearch-style flat log)
+        try:
+            libro.append_results_tsv(os.path.join(ROOT, 'results.tsv'),
+                                     batch_num=batch_num,
+                                     selected_ids=[p['id'] for p in batch])
+        except Exception as e:
+            log(f"results.tsv write failed: {e}", 'warn')
+
         improved = nuevo_mae < mae_actual * (1 - args.min_mejora)
         if improved:
             pct = (mae_actual - nuevo_mae) / mae_actual * 100
@@ -549,10 +611,18 @@ def main():
             batches_sin_mejora = 0
             update_program_md(os.path.join(ROOT, args.program), libro)
             msg = f"Batch {batch_num} done. MAE improved to {nuevo_mae:.4f}!"
+            if git_branch:
+                sha = git_commit_experiment(batch_num, [p['id'] for p in batch], nuevo_mae)
+                if sha:
+                    log(f"git: kept commit {sha}", 'ok')
         else:
             batches_sin_mejora += 1
             log(f"No significant improvement ({batches_sin_mejora}/{args.paciencia})", 'warn')
             msg = f"Batch {batch_num} done. No improvement (patience: {batches_sin_mejora}/{args.paciencia})."
+            if git_branch:
+                sha = git_commit_experiment(batch_num, [p['id'] for p in batch], nuevo_mae)
+                if sha and git_reset_last():
+                    log(f"git: rolled back {sha} (no improvement)", 'warn')
 
         update_status(phase="loop", agents_update={
             "patron": {"status": "running_loop", "message": msg},

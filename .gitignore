@@ -32,5 +32,11 @@ Thumbs.db
 # Logs
 *.log
 
+# Autoresearch-style flat results log (regenerable from il_libro.json)
+results.tsv
+
+# Autoresearch clone (reference only)
+autoresearch/
+
 # Optuna
 *.db

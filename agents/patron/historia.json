@@ -151,5 +151,29 @@
     ],
     "patron_reasoning": "The 'xgboost_objective_mae' proposal is highly promising with a significant expected MAE reduction and high confidence; it's the only available proposal and directly addresses a fundamental model configuration.",
     "contabile_reasoning": "The current best model is XGBoost (MAE 20.37) using full features (serie_features.csv). There's a persistent high variance in MAE across folds, indicating overfitting or inability to generalize to later, more volatile periods. The 'Lo que ha funcionado' section is somewhat contradictory with 'Estado actual' regarding selected vs. full features, but the current best uses full. Ensembles, LightGBM, and Random Forest have consistently underperformed. We need to focus on fundamental XGBoost improvements and careful feature selection."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-12T20:08:36.127715+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "ensemble_top_models_with_xgb"
+    ],
+    "patron_reasoning": "We prioritize the highest-scoring ensemble for potentially significant MAE reduction and pair it with feature engineering to explore a diverse approach. This combination offers both model refinement and data transformation within budget.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 3,
+    "timestamp": "2026-06-12T20:09:46.959557+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "xgboost_regularization_hpo"
+    ],
+    "patron_reasoning": "The 'xgboost_regularization_hpo' proposal is highly promising with a significant expected MAE reduction and high confidence; it's the only available proposal and directly addresses a fundamental model configuration to combat overfitting.",
+    "contabile_reasoning": "The current best model is XGBoost (MAE 20.37) using the full feature set (`data/serie_features.csv`). A critical observation is the high variance in MAE across folds (e.g., 11.81 vs 27.75 for the best model), suggesting overfitting or a failure to adapt to changing series dynamics in later periods. The previous attempt to align the objective with MAE (`reg:absoluteerror`) did not yield an improvement. Therefore, the focus must shift to explicit regularization to combat overfitting and the generation of new features that capture volatility or regime changes."
   }
 ]

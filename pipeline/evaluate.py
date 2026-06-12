@@ -144,6 +144,61 @@ class IlLibro:
         print(df.to_string(index=False))
         print(f"\nMejor MAE: {self.data['best_mae']:.4f} ({self.data['best_experiment_id']})")
 
+    def append_results_tsv(self, tsv_path: str, batch_num: int,
+                           selected_ids: List[str]) -> None:
+        """
+        Append one row per experiment dispatched in this batch to a flat TSV log.
+        Schema: batch \t timestamp \t exp_id \t model \t agent \t mae_mean \t mae_std \t beats_baseline \t description
+        Inspired by Karpathy's autoresearch results.tsv pattern.
+        """
+        header = "batch\ttimestamp\texp_id\tmodel\tagent\tmae_mean\tmae_std\tbeats_baseline\tdescription\n"
+        path = Path(tsv_path)
+        write_header = not path.exists() or path.stat().st_size == 0
+
+        # Resolve only the experiments registered in this batch (by id match)
+        rows = []
+        ids_set = set(selected_ids)
+        for e in self.data.get("experiments", []):
+            # match either explicit id mapping or recently-added experiments via timestamp ordering
+            if e["id"] in ids_set:
+                desc = (e.get("config", {}) or {})
+                desc_str = " ".join(f"{k}={v}" for k, v in list(desc.items())[:4]).replace("\t", " ")
+                rows.append((
+                    batch_num,
+                    e.get("timestamp", ""),
+                    e["id"],
+                    e.get("model", ""),
+                    e.get("agent", ""),
+                    f"{e.get('mae_mean', 0):.6f}",
+                    f"{e.get('mae_std', 0):.4f}",
+                    "1" if e.get("beats_baseline") else "0",
+                    desc_str,
+                ))
+
+        # If none matched (Contabile proposal id != experiment id), fall back to N most recent
+        if not rows:
+            recent = self.data.get("experiments", [])[-len(selected_ids):]
+            for e in recent:
+                desc = (e.get("config", {}) or {})
+                desc_str = " ".join(f"{k}={v}" for k, v in list(desc.items())[:4]).replace("\t", " ")
+                rows.append((
+                    batch_num,
+                    e.get("timestamp", ""),
+                    e["id"],
+                    e.get("model", ""),
+                    e.get("agent", ""),
+                    f"{e.get('mae_mean', 0):.6f}",
+                    f"{e.get('mae_std', 0):.4f}",
+                    "1" if e.get("beats_baseline") else "0",
+                    desc_str,
+                ))
+
+        with open(path, "a", encoding="utf-8") as f:
+            if write_header:
+                f.write(header)
+            for row in rows:
+                f.write("\t".join(str(x) for x in row) + "\n")
+
 
 # ---------------------------------------------------------------------------
 # CLI
