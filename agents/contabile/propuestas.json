@@ -1,55 +1,25 @@
 {
-  "reasoning": "XGBoost is the dominant architecture (best MAE 20.59, beats LightGBM by 8+ MAE points), but both XGBoost variants share the same structural weakness: folds 1-2 achieve MAE ~17 while folds 4-5 plateau at ~22-24, a 35% temporal degradation that flags overfitting on early time windows. Mathematical analysis of the two existing XGBoost models proves their optimal static weighted blend converges to w=1 on the champion (fold-mean MAE is linear in blend weight), making a weighted ensemble of these two provably worthless. With exactly 1 experiment remaining, explicit regularization \u2014 depth reduction plus gamma/L1/L2/min_child_weight \u2014 is the only remaining high-confidence lever to close the late-fold gap.",
+  "reasoning": "The current best model is XGBoost (MAE 20.37) using full features (serie_features.csv). There's a persistent high variance in MAE across folds, indicating overfitting or inability to generalize to later, more volatile periods. The 'Lo que ha funcionado' section is somewhat contradictory with 'Estado actual' regarding selected vs. full features, but the current best uses full. Ensembles, LightGBM, and Random Forest have consistently underperformed. We need to focus on fundamental XGBoost improvements and careful feature selection.",
   "propuestas": [
     {
-      "id": "xgboost_regularized_depth_v3",
-      "descripcion": "XGBoost with depth 7\u21925 plus gamma/L1/L2/min_child_weight to close the fold 4-5 temporal overfitting gradient",
+      "id": "xgboost_objective_mae",
+      "descripcion": "Run XGBoost HPO with objective='reg:absoluteerror' to align training with the MAE evaluation metric.",
       "worker": "modelos",
       "accion": "run_model",
       "args_worker": {
         "model": "xgboost",
-        "features": "data/serie_features.csv",
-        "params": {
-          "n_estimators": 400,
-          "learning_rate": 0.03,
-          "max_depth": 5,
-          "subsample": 0.65,
-          "colsample_bytree": 0.85,
-          "gamma": 0.3,
-          "reg_alpha": 0.5,
-          "reg_lambda": 2.0,
-          "min_child_weight": 3
-        }
+        "data": "data/serie_features.csv",
+        "trials": 30,
+        "objective": "reg:absoluteerror"
       },
-      "mae_delta_esperado": -2.5,
-      "confianza": 0.62,
-      "costo": "bajo",
-      "score": 1.55,
-      "evidencia": "Both XGBoost runs use max_depth=7 with zero explicit regularization (gamma=0, reg_alpha=0, reg_lambda=1 default, min_child_weight=1 default). Fold pattern [17.64, 16.95, 22.04, 23.83, 22.48] is a textbook temporal overfitting signature \u2014 MAE climbs 35% from early to late folds as the model struggles to generalize beyond its training window. Depth 7\u21925 is the primary lever: it cuts maximum leaf-level memorization by ~4\u00d7. gamma=0.3 raises the minimum-gain threshold for any split, pruning low-signal nodes. reg_alpha=0.5 applies L1 sparsity to noisy feature interactions. reg_lambda=2.0 doubles default L2 shrinkage. min_child_weight=3 prevents splits on thin seasonal nodes with few observations. n_estimators bumped to 400 to compensate for the lower learning rate and regularization-induced shrinkage. A weighted ensemble of the two existing XGBoost models is ruled out by algebra: mean MAE = 20.722 \u2212 0.134\u00b7w, which is strictly minimized at w=1 (full weight to champion), yielding exactly 20.59 with zero gain from blending.",
-      "generado_en": "2026-06-10T23:01:03.193566+00:00"
-    },
-    {
-      "id": "stacking_xgb1_xgb2_ridge",
-      "descripcion": "Stacking ensemble of XGB champion + XGB runner-up with ridge meta-learner exploiting fold-specific complementarity",
-      "worker": "ensemble",
-      "accion": "run_ensemble",
-      "args_worker": {
-        "type": "stacking",
-        "base_experiments": [
-          "exp_20260610_225647_76093d",
-          "exp_20260610_225332_2babe1"
-        ],
-        "meta_learner": "ridge",
-        "meta_alpha": 1.0
-      },
-      "mae_delta_esperado": -0.7,
-      "confianza": 0.28,
-      "costo": "bajo",
-      "score": 0.196,
-      "evidencia": "XGB2 dominates folds 1-2 (15.88, 15.32) while XGB1 dominates folds 3-5 (22.04, 23.83, 22.48 vs 22.50, 25.95, 23.96), a fold-specific complementarity a ridge meta-learner could theoretically exploit to assign time-adaptive weights. However, the meta-learner trains on only 5 fold-level observations \u2014 far too few to learn reliable fold-conditional weights without overfitting the meta-level itself. Expected gain is marginal at best. NOT recommended as the final experiment: xgboost_regularized_depth_v3 has 8\u00d7 higher expected score and directly attacks the root cause.",
-      "generado_en": "2026-06-10T23:01:03.193596+00:00"
+      "mae_delta_esperado": -3.0,
+      "confianza": 0.9,
+      "costo": "medio",
+      "score": 1.35,
+      "evidencia": "This is the most direct unexplored angle identified. Aligning the objective function with the evaluation metric (MAE) is a fundamental improvement that could",
+      "generado_en": "2026-06-12T20:06:59.646474+00:00"
     }
   ],
-  "model": "claude-sonnet-4-6",
-  "generado_en": "2026-06-10T23:01:03.195267+00:00"
+  "model": "gemini-2.5-flash",
+  "generado_en": "2026-06-12T20:06:59.647791+00:00"
 }

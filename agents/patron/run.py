@@ -231,7 +231,7 @@ def patron_decide(propuestas: list, libro: dict, historia: list,
 Choose up to {args.paralelo} proposals to run next, or stop the swarm.
 """
     log(f"Asking {MODEL} for dispatch decision...", 'ai')
-    raw = call_claude(PATRON_SYSTEM, user_msg, max_tokens=1024)
+    raw = call_claude(PATRON_SYSTEM, user_msg, max_tokens=2048)
     if args.verbose:
         print(f"  Claude: {raw[:400]}")
     
@@ -504,8 +504,18 @@ def main():
         selected_ids  = decision.get('selected_proposals', [p['id'] for p in fresh[:args.paralelo]])
         batch         = [p for p in fresh if p['id'] in selected_ids][:args.paralelo]
 
+        # Drop malformed proposals (e.g. truncated LLM output missing required fields)
+        valid_batch = []
+        for p in batch:
+            if not p.get('worker'):
+                log(f"Skipping malformed proposal '{p.get('id','?')}' (missing 'worker' field)", 'warn')
+                propuestas_usadas.add(p['id'])
+                continue
+            valid_batch.append(p)
+        batch = valid_batch
+
         if not batch:
-            log("No proposals selected. Stopping.", 'warn')
+            log("No valid proposals selected. Stopping.", 'warn')
             break
 
         for p in batch:

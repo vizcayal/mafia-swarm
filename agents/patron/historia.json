@@ -61,5 +61,95 @@
     ],
     "patron_reasoning": "Budget remaining is exactly 1, so only one experiment can run. xgboost_regularized_depth_v3 is the clear choice: score 8\u00d7 higher than the stacking alternative, directly attacks the root cause of temporal overfitting (max_depth 7\u21925 + explicit gamma/L1/L2 regularization), and Il Contabile explicitly flags stacking as NOT recommended for the final slot. batches_sin_mejora=2 < paciencia=3, so the patience threshold hasn't been hit yet.",
     "contabile_reasoning": "XGBoost is the dominant architecture (best MAE 20.59, beats LightGBM by 8+ MAE points), but both XGBoost variants share the same structural weakness: folds 1-2 achieve MAE ~17 while folds 4-5 plateau at ~22-24, a 35% temporal degradation that flags overfitting on early time windows. Mathematical analysis of the two existing XGBoost models proves their optimal static weighted blend converges to w=1 on the champion (fold-mean MAE is linear in blend weight), making a weighted ensemble of these two provably worthless. With exactly 1 experiment remaining, explicit regularization \u2014 depth reduction plus gamma/L1/L2/min_child_weight \u2014 is the only remaining high-confidence lever to close the late-fold gap."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-12T19:51:58.072607+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "ensemble_top_models_with_xgb",
+      "feature_selection_top_15"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-12T19:52:26.202536+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "lightgbm_hpo_100_trials",
+      "artigiano_expand_rolling_windows"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-12T19:57:12.952818+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "ensemble_top_models_with_xgb",
+      "feature_selection_top_15"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-12T19:57:35.332869+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "lightgbm_hpo_100_trials",
+      "artigiano_expand_rolling_windows"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-12T19:59:47.624774+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "ensemble_top_models_with_xgb",
+      "feature_selection_top_15"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-12T20:00:24.578524+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "lightgbm_hpo_100_trials",
+      "artigiano_expand_rolling_windows"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-12T20:07:37.783965+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "xgboost_objective_mae"
+    ],
+    "patron_reasoning": "The 'xgboost_objective_mae' proposal is highly promising with a significant expected MAE reduction and high confidence; it's the only available proposal and directly addresses a fundamental model configuration.",
+    "contabile_reasoning": "The current best model is XGBoost (MAE 20.37) using full features (serie_features.csv). There's a persistent high variance in MAE across folds, indicating overfitting or inability to generalize to later, more volatile periods. The 'Lo que ha funcionado' section is somewhat contradictory with 'Estado actual' regarding selected vs. full features, but the current best uses full. Ensembles, LightGBM, and Random Forest have consistently underperformed. We need to focus on fundamental XGBoost improvements and careful feature selection."
   }
 ]

@@ -270,7 +270,7 @@ def main():
         print(f"📋 Using research program: {using}\n")
 
     try:
-        raw = call_claude(system_prompt, user_prompt, max_tokens=4096)
+        raw = call_claude(system_prompt, user_prompt, max_tokens=8192)
         if args.verbose:
             print("── Claude response ──────────────────")
             print(raw[:1200])

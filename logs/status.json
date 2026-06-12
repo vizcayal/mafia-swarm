@@ -1,14 +1,14 @@
 {
-  "phase": "completed",
-  "updated_at": "18:01:57",
+  "phase": "analyzing",
+  "updated_at": "15:07:37",
   "agents": {
     "patron": {
-      "status": "idle",
-      "message": "Swarm complete! Final MAE: 20.3715"
+      "status": "running_loop",
+      "message": "Starting batch 2. Budget left: 5."
     },
     "contabile": {
-      "status": "idle",
-      "message": "Done"
+      "status": "running",
+      "message": "Analyzing il_libro.json (Budget left: 5)..."
     },
     "artigiano": {
       "status": "idle",
@@ -20,7 +20,7 @@
     },
     "modelos": {
       "status": "idle",
-      "message": "Done"
+      "message": "Finished: Run XGBoost HPO with objective='reg:absoluteerror' to align training with the MAE evaluation metric."
     },
     "ensemble": {
       "status": "idle",
@@ -28,7 +28,7 @@
     },
     "libro": {
       "status": "idle",
-      "message": "Final Best MAE: 20.3715"
+      "message": "Current Best MAE: 20.3715"
     }
   }
 }
