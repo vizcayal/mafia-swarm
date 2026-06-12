@@ -175,5 +175,31 @@
     ],
     "patron_reasoning": "The 'xgboost_regularization_hpo' proposal is highly promising with a significant expected MAE reduction and high confidence; it's the only available proposal and directly addresses a fundamental model configuration to combat overfitting.",
     "contabile_reasoning": "The current best model is XGBoost (MAE 20.37) using the full feature set (`data/serie_features.csv`). A critical observation is the high variance in MAE across folds (e.g., 11.81 vs 27.75 for the best model), suggesting overfitting or a failure to adapt to changing series dynamics in later periods. The previous attempt to align the objective with MAE (`reg:absoluteerror`) did not yield an improvement. Therefore, the focus must shift to explicit regularization to combat overfitting and the generation of new features that capture volatility or regime changes."
+  },
+  {
+    "batch": 1,
+    "timestamp": "2026-06-12T20:25:05.339600+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "ensemble_top_models_with_xgb",
+      "feature_selection_top_15"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
+  },
+  {
+    "batch": 2,
+    "timestamp": "2026-06-12T20:25:33.095828+00:00",
+    "mae_before": 20.37149403889974,
+    "mae_after": 20.37149403889974,
+    "improved": false,
+    "selected": [
+      "lightgbm_hpo_100_trials",
+      "artigiano_expand_rolling_windows"
+    ],
+    "patron_reasoning": "Fallback: picked top proposals by score.",
+    "contabile_reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning."
   }
 ]

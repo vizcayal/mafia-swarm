@@ -1,24 +1,73 @@
 {
-  "reasoning": "The current best model is XGBoost (MAE 20.37) using the full feature set (`data/serie_features.csv`). A critical observation is the high variance in MAE across folds (e.g., 11.81 vs 27.75 for the best model), suggesting overfitting or a failure to adapt to changing series dynamics in later periods. The previous attempt to align the objective with MAE (`reg:absoluteerror`) did not yield an improvement. Therefore, the focus must shift to explicit regularization to combat overfitting and the generation of new features that capture volatility or regime changes.",
+  "reasoning": "Fallback Expert analysis: XGBoost is leading. Suggesting ensemble of top models, LightGBM HPO, and feature space tuning.",
   "propuestas": [
     {
-      "id": "xgboost_regularization_hpo",
-      "descripcion": "Optimize XGBoost with explicit regularization parameters (gamma, reg_alpha, reg_lambda, min_child_weight) to combat overfitting and reduce MAE variance across folds.",
+      "id": "ensemble_top_models_with_xgb",
+      "descripcion": "Weighted Ensemble of best XGBoost and LightGBM models",
+      "worker": "ensemble",
+      "accion": "run_ensemble",
+      "args_worker": {
+        "top_k": 3,
+        "method": "weighted"
+      },
+      "mae_delta_esperado": -1.2,
+      "confianza": 0.85,
+      "costo": "medio",
+      "evidencia": "XGBoost and LightGBM are both beating the baseline. Ensembling them should yield further MAE reductions.",
+      "score": 0.51,
+      "generado_en": "2026-06-12T20:25:34.520010+00:00"
+    },
+    {
+      "id": "feature_selection_top_15",
+      "descripcion": "Reduce selected features to top 15 using Mutual Info",
+      "worker": "selezionatore",
+      "accion": "run_selection",
+      "args_worker": {
+        "method": "mutual_info",
+        "top_k": 15
+      },
+      "mae_delta_esperado": -0.5,
+      "confianza": 0.65,
+      "costo": "bajo",
+      "evidencia": "Reducing the feature count from 20 to 15 can reduce overfitting, especially in tree-based models.",
+      "score": 0.325,
+      "generado_en": "2026-06-12T20:25:34.520025+00:00"
+    },
+    {
+      "id": "lightgbm_hpo_100_trials",
+      "descripcion": "Aggressive HPO (100 trials) for LightGBM",
       "worker": "modelos",
       "accion": "run_model",
       "args_worker": {
-        "model": "xgboost",
-        "data": "data/serie_features.csv",
-        "trials": 30
+        "model": "lightgbm",
+        "trials": 100
       },
-      "mae_delta_esperado": -2.5,
-      "confianza": 0.9,
+      "mae_delta_esperado": -0.8,
+      "confianza": 0.75,
       "costo": "medio",
-      "score": 1.125,
-      "evidencia": "This directly addresses the high MAE variance",
-      "generado_en": "2026-06-12T20:09:18.884182+00:00"
+      "evidencia": "LightGBM was previously run with fewer trials. 100 trials of HPO could close the gap to XGBoost.",
+      "score": 0.30000000000000004,
+      "generado_en": "2026-06-12T20:25:34.520027+00:00"
+    },
+    {
+      "id": "artigiano_expand_rolling_windows",
+      "descripcion": "Expand rolling windows to include larger horizons (e.g. 24, 48)",
+      "worker": "artigiano",
+      "accion": "run_features",
+      "args_worker": {
+        "lags": "1,2,3,6,12,24",
+        "windows": "3,6,12,24,48",
+        "diffs": "1,12",
+        "fourier": "12:6"
+      },
+      "mae_delta_esperado": -0.6,
+      "confianza": 0.7,
+      "costo": "medio",
+      "evidencia": "Adding longer rolling averages will capture longer-term trends in the series.",
+      "score": 0.21,
+      "generado_en": "2026-06-12T20:25:34.520034+00:00"
     }
   ],
   "model": "gemini-2.5-flash",
-  "generado_en": "2026-06-12T20:09:18.885109+00:00"
+  "generado_en": "2026-06-12T20:25:34.521464+00:00"
 }
